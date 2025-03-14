@@ -1358,3 +1358,39 @@
   (is (expected-non-js-able? [{:a 1} {:b 2}] (assoc (->clj #js [#js {:a 1}]) 1 {:b 2})))
   (is (expected-js-able? [{:a 1} 1] (persistent! (assoc! (transient (->clj #js [#js {:a 1}])) 1 1))))
   (is (expected-non-js-able? [{:a 1} {:b 2}] (persistent! (assoc! (transient (->clj #js [#js {:a 1}])) 1 {:b 2})))))
+
+(defn prop->keyword-preserving-full
+  "If it starts-with a colon, it is a namespace keyword, which needs to drop the leading colon
+
+  Because: 'Do not use : in the keyword strings, it will be added automatically.'"
+  [prop]
+  (if (and prop (= ":" (get prop 0)))
+    (keyword (.substring prop 1))
+    (keyword prop)))
+
+(defn key->prop-keeping-full
+  [kw]
+  (if (simple-keyword? kw)
+    (name kw)
+    (str kw)))
+
+(defn key-dependent-transform [k v]
+  (case k
+    :key/that-is-keyword   (prop->keyword-preserving-full v)
+    :key/that-is-uuid      (uuid v)
+    :key/that-contains-seq (mapv prop->keyword-preserving-full (->clj v))
+    nil))
+
+(deftest key-dependent-transform-test
+  (let [clj             {:key/that-is-keyword   :keyword
+                         :key/that-contains-seq [:simple :key/that-is-keyword]
+                         :key/that-is-uuid      (random-uuid)
+                         :simple                "some-string"}
+        clj-string-uuid (update clj :key/that-is-uuid str)
+        round-trip      (-> clj-string-uuid
+                          (->js :key->prop key->prop-keeping-full)
+                          (->clj
+                            :transform-v key-dependent-transform
+                            :prop->key prop->keyword-preserving-full
+                            :key->prop key->prop-keeping-full))]
+    (is (= clj round-trip))))
