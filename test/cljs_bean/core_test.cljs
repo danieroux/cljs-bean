@@ -1358,3 +1358,16 @@
   (is (expected-non-js-able? [{:a 1} {:b 2}] (assoc (->clj #js [#js {:a 1}]) 1 {:b 2})))
   (is (expected-js-able? [{:a 1} 1] (persistent! (assoc! (transient (->clj #js [#js {:a 1}])) 1 1))))
   (is (expected-non-js-able? [{:a 1} {:b 2}] (persistent! (assoc! (transient (->clj #js [#js {:a 1}])) 1 {:b 2})))))
+
+(defn key-dependent-transform [k v]
+  (case k
+    :key/that-is-keyword (keyword v)
+    :key/that-is-uuid (uuid v)
+    nil))
+
+(deftest key-dependent-transform-test
+  (let [clj             {:key/that-is-keyword :keyword
+                         :key/that-is-uuid    (random-uuid)
+                         :simple              "some-string"}
+        clj-string-uuid (update clj :key/that-is-uuid str)]
+    (is (= clj (->clj (->js clj-string-uuid) :transform-v key-dependent-transform)))))
